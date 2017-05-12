@@ -1,0 +1,55 @@
+[% INCLUDE 'doc-head-open.inc' %]
+ <title>Koha: Branch Closure: Configuration</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body>
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+
+<div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo; Branch Closure &rsaquo; Configuration</div>
+
+<div id="doc3">
+    <!-- We can access our own plugins resource files using the PLUGIN_PATH variable. -->
+    <!--<img src="[% PLUGIN_PATH %]/logo.png" />-->
+    <h3>Koha: Branch Closure: Configuration</h3>
+
+    <!-- Notice our form here has no 'action', this is good, it means that our forms will always get passed back to 'plugins/run.pl'. You could hard code it instead if you prefer -->
+    <form method="get">
+        <!-- Always pass these two parameters so the plugin system knows what to execute! -->
+        <input type="hidden" name="class" value="[% CLASS %]"/>
+        <input type="hidden" name="method" value="[% METHOD %]"/>
+
+        [% IF error %]<div class="warn alert error">Error: [% error %]</div>[% END %]
+
+        <p>
+            <label for="subject">Email subject: </label>
+            <input name="subject" type="text" class="input-xxlarge" size="100" value="[% subject %]" />
+        </p>
+
+        <p>
+            <label for="body">Email text: </label>
+            <br/>
+            <textarea rows="15" cols="200" name="body">[% body %]</textarea>
+        </p>
+
+        <p>This plugin uses Template Toolkit syntax. It provides two tags that can be used in the email generation</p>
+
+        <pre>
+[% TAGS [- -] %]
+[% name %]       - name of patron
+[% cardnumber %] - cardnumber of patron
+[% frombranch %] - the name of the branch that will be closed
+[% tobranch %]   - the name of the temporary branch to use as pickup and homebranch during closure
+[% fromdate %]   - date of closure
+[% todate %]     - date of opening
+        </pre>
+
+        <p>The email be formatted any way you like (even using html tags).</p>
+[- TAGS [% %] -]
+
+        <input type="hidden" name="save" value="1" />
+
+        <input type="submit" value="Save configuration" />
+    </form>
+
+[% INCLUDE 'intranet-bottom.inc' %]

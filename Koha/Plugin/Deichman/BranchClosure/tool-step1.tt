@@ -1,0 +1,51 @@
+[% INCLUDE 'doc-head-open.inc' %]
+ <title>Koha: Tools: Branch Closure</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body>
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+[% INCLUDE 'calendar.inc' %]
+
+<div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo; Branch Closure</div>
+
+<div id="doc3">
+
+    <!-- Notice our form here has no 'action', this is good, it means that our forms will always get passed back to 'plugins/run.pl'. You could hard code it instead if you prefer -->
+    <form method="post">
+      <input type="hidden" name="class" value="[% CLASS %]"/>
+      <input type="hidden" name="method" value="[% METHOD %]"/>
+      <input type="hidden" name="fromdate" value="[% Date.now() %]"/>
+
+      <p>Tilpass epost til brukerne.</p>
+      <br/>
+      <label for="frombranch">Avdeling som skal stenges:</label>
+      <select name="frombranch">
+        [% FOREACH library IN libraries %]
+          <option value="[% library.branchcode %]">
+            [% library.branchname %]
+          </option>
+        [% END %]
+      </select>
+      <br/>
+
+      <label for="tobranch">Midlertidig avdeling for lånere og eksemplarer:</label>
+      <select name="tobranch">
+        [% FOREACH library IN libraries %]
+          <option value="[% library.branchcode %]">
+            [% library.branchname %]
+          </option>
+        [% END %]
+      </select>
+      <br/>
+
+      <p>Dato avdelingen skal åpne igjen:</p>
+      <input type="text" size="10" id="todate" name="todate" class="datepicker" />
+
+      <label for="movepatrons">Flytt lånere og reservasjoner til midlertidig avdeling</label>
+      <input name="movepatrons" type="checkbox" checked="false" />
+
+      <input name="validate" type="submit" value="Valider stenging" />
+    </form>
+
+[% INCLUDE 'intranet-bottom.inc' %]
