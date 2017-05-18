@@ -2,16 +2,19 @@
 
 # About
 
-WIP - this plugin is not finished.
-
 This plugin handles the temporary closing of a branch.
 It is a tool that handles:
-- temporarily moving reservations
+- temporarily moving reservations to be picked up at branch to a temporary branch
+- temporarily moving patrons home branch
 - disabling branch in Koha REST API
 - temporarily making branch items unavailable
 - sends notification to patrons with this homebranch about changes
 
-A general email subject and body can be set in configuration.
+A table is displayed on first page if any branches are currently closed,
+with the option to reopen. Reopening reverts the changes made by the closure.
+
+A general email subject and body can be set in configuration, but can be
+individually configured per closure.
 
 # Setup
 
