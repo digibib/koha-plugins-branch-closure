@@ -1,0 +1,22 @@
+[% USE Branches %]
+[% INCLUDE 'doc-head-open.inc' %]
+ <title>Koha: Tools: Branch Closure</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body>
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+
+<div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo; Gjenåpnet avdeling</div>
+
+<div id="doc3">
+    [% Branches.GetName(branchcode) %] er nå gjenåpnet!
+    [% IF movepatrons %]
+      Lånere og gjenværende reservasjoner er flyttet tilbake fra [% Branches.GetName(tempbranch) %].
+    [% END %]
+    <form>
+      <input type="hidden" name="class" value="[% CLASS %]"/>
+      <input type="hidden" name="method" value="[% METHOD %]"/>
+      <input type="submit" value="gå tilbake" />
+    </form>
+[% INCLUDE 'intranet-bottom.inc' %]

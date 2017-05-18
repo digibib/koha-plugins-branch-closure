@@ -1,0 +1,104 @@
+[% USE Branches %]
+[% USE KohaDates %]
+[% INCLUDE 'doc-head-open.inc' %]
+ <title>Koha: Tools: Branch Closure</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body>
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+[% INCLUDE 'calendar.inc' %]
+
+<div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo; Branch Closure</div>
+
+<div id="doc3">
+
+  [% IF closed_branches.size > 0 %]
+    <h2>Stengte avdelinger:</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>id</th><th>avdeling</th><th>midlertidig avd.</th><th>Fra dato</th><th>Til dato</th><th>Flytte lånere</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        [% FOREACH cb IN closed_branches %]
+          [% status = cb.done %]
+          <tr>
+            <td>[% cb.id %]</td>
+            <td>[% Branches.GetName(cb.branchcode) %]</td>
+            <td>[% Branches.GetName(cb.tempbranch) %]</td>
+            <td>[% cb.from_date | $KohaDates %]</td>
+            <td>[% cb.to_date | $KohaDates %]</td>
+            <td>[% cb.movepatrons ? "ja" : "nei" %]</td>
+            <td>[% IF cb.done == 0 %]
+                  <form id="reopen_branch">
+                    <input type="hidden" name="class" value="[% CLASS %]"/>
+                    <input type="hidden" name="method" value="[% METHOD %]"/>
+                    <input type="hidden" name="op" value="reopen" />
+                    <input type="hidden" name="id" value="[% cb.id %]" />
+                    <input type="hidden" name="branchcode" value="[% cb.branchcode %]" />
+                    <input type="hidden" name="tempbranch" value="[% cb.tempbranch %]" />
+                    <input type="hidden" name="fromdate" value="[% cb.fromdate %]" />
+                    <input type="hidden" name="movepatrons" value="[% cb.movepatrons %]" />
+                    <input type="submit" value="gjenåpne" />
+                  </form>
+                [% ELSE %]
+                  Åpnet
+                [% END %]
+            </td>
+          </tr>
+        [% END %]
+      </tbody>
+    </table>
+    <br /><br/ >
+  [% END %]
+
+  <h2>Legg til ny stenging av avdeling</h2>
+    <!-- Notice our form here has no 'action', this is good, it means that our forms will always get passed back to 'plugins/run.pl'. You could hard code it instead if you prefer -->
+    <form method="post" id="close_branch">
+      <input type="hidden" name="class" value="[% CLASS %]"/>
+      <input type="hidden" name="method" value="[% METHOD %]"/>
+      <input type="hidden" name="op" value="close" />
+
+      <p>Avdeling som skal stenges:</p>
+      <select name="frombranch">
+        [% FOREACH library IN libraries %]
+          <option value="[% library.branchcode %]">
+            [% library.branchname %]
+          </option>
+        [% END %]
+      </select>
+      <br/><br/>
+
+      <p>Midlertidig avdeling for lånere og eksemplarer:</p>
+      <select name="tobranch">
+        [% FOREACH library IN libraries %]
+          <option value="[% library.branchcode %]">
+            [% library.branchname %]
+          </option>
+        [% END %]
+      </select>
+      <br/><br/>
+
+      <p>Dato avdelingen skal stenge:</p>
+      <strong>Merk at avdelingen vil stenges umiddelbart, uavhengig av dato valgt her.</strong><br />
+      <input type="date" id="fromdate" name="fromdate" class="datepicker" />
+
+      <p>Dato avdelingen skal åpne igjen:</p>
+      <input type="date" id="todate" name="todate" class="datepicker" />
+
+      <p>Flytt lånere og reservasjoner til midlertidig avdeling</p>
+      <input name="movepatrons" type="checkbox" checked="checked" />
+
+      <p>Tittel på epost</p>
+      <input name="email_subject" type="text" value="[% subject %]" />
+
+      <p>Mal for epost</p>
+      <textarea id="email_template" class="text" cols="86" rows ="20" name="email_template" form="close_branch">[% body %]</textarea>
+
+      <br/><br/>
+      <input name="validate" type="submit" value="Steng filial" />
+    </form>
+
+[% INCLUDE 'intranet-bottom.inc' %]
