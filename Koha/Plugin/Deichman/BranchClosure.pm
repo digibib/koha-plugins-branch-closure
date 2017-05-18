@@ -6,8 +6,10 @@ use Modern::Perl;
 ## Required for all plugins
 use base qw(Koha::Plugins::Base);
 use CGI '-utf8';
-use DateTime;
+use Koha::DateUtils qw/dt_from_string output_pref/;
 use Koha::Database;
+use Koha::Libraries;
+use Koha::Patrons;
 
 ## Here we set our plugin version
 our $VERSION = 1.00;
@@ -49,14 +51,16 @@ sub install() {
 
     return C4::Context->dbh->do(
         qq{
-              CREATE TABLE IF NOT EXISTS 'branch_closures' (
-              id int(11) NOT NULL AUTO_INCREMENT,
-              branchcode varchar(10) COLLATE utf8_unicode_ci NOT NULL,
-              from_date DATE NOT NULL,
-              to_date DATE NOT NULL,
-              done int(1) NOT NULL DEFAULT 0,
-              PRIMARY KEY (id)
-              ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+            CREATE TABLE IF NOT EXISTS `closed_branches` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `branchcode` varchar(10) COLLATE utf8_unicode_ci NOT NULL,
+            `tempbranch` varchar(10) COLLATE utf8_unicode_ci NOT NULL,
+            `from_date` DATE NOT NULL,
+            `to_date` DATE NOT NULL,
+            `movepatrons` int(1) DEFAULT 0,
+            `done` int(1) NOT NULL DEFAULT 0,
+            PRIMARY KEY (id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
           }
     );
 }
@@ -67,7 +71,7 @@ sub install() {
 sub uninstall() {
     my ( $self) = @_;
 
-    return C4::Context->dbh->do("DROP TABLE 'branch_closures'");
+    return C4::Context->dbh->do("DROP TABLE `closed_branches`");
 }
 
 ## Plugin configuration handler
@@ -85,8 +89,7 @@ sub configure {
 
         print $cgi->header();
         print $template->output();
-    }
-    else {
+    } else {
         $self->store_data(
             {
                 body               => $cgi->param('body'),
@@ -99,186 +102,342 @@ sub configure {
     $self->go_home();
 }
 
-# Tool handler
-# - in general any plugin that modifies the Koha database should be considered a tool
+# Main Tool handler
 sub tool {
     my ( $self, $args ) = @_;
 
     my $cgi = $self->{'cgi'};
+    my $op = $cgi->param('op') || "";
 
-    if ( $cgi->param('validate') ) { # validate button in step 1 clicked
-        $self->tool_step2();
-    } else if ( $cgi->param('confirmed') ) { # confirm button in step 1 clicked
-        $self->tool_step3();
+    if ( $op eq "reopen" ) {
+        $self->reopen_branch;
+    } elsif ( $op eq "close" ) {
+        $self->close_branch;
     } else {
-        $self->tool_step1();
+        $self->firstpage;
     }
 
 }
 
-# Step 1 - Choose frombranch, tobranch and length of closure, compose email template
-sub tool_step1 {
+# Show status of closed branches, reopen or make new closures
+sub firstpage {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
     my $body_template = $self->retrieve_data('body');
     my $subject       = $self->retrieve_data('subject');
 
-    my $template = $self->get_template({ file => 'tool-step1.tt' });
+    my @closed_branches = get_closed_branches();
+    my @libraries = Koha::Libraries->search;
+
+    my $template = $self->get_template({ file => 'firstpage.tt' });
     $template->param(
-        subject => $subject,
-        content_template => $body_template,
+        closed_branches => \@closed_branches,
+        libraries       => \@libraries,
+        subject         => $subject,
+        body            => $body_template,
     );
     print $cgi->header(-charset => 'UTF-8');
     print $template->output();
 }
 
-# Step 2 - Close branch and send emails
-sub tool_step2 {
+sub get_closed_branches {
+    my $query = "SELECT * FROM closed_branches";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
+    my @res;
+    while ( my $row = $sth->fetchrow_hashref() ) {
+        push @res, $row;
+    }
+    return @res;
+}
+
+# Main method for closing branch
+sub close_branch {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
     my $frombranch     = $cgi->param('frombranch');
     my $tobranch       = $cgi->param('tobranch');
-    my $fromDate       = $cgi->param('fromdate');
-    my $toDate         = $cgi->param('todate');
+    my $fromDate       = dt_from_string($cgi->param('fromdate'));
+    my $toDate         = dt_from_string($cgi->param('todate'));
     my $email_subject  = $cgi->param('email_subject');
     my $email_template = $cgi->param('email_template');
+    my $movepatrons    = $cgi->param('movepatrons') eq "on" ? 1 : undef;
 
     # do database updates
     disable_branch_in_api($frombranch);
     make_items_unavailable($frombranch);
-    change_pickup_branch({ frombranch => $frombranch, tobranch => $tobranch });
-    change_patrons_homebranch({ frombranch => $frombranch, tobranch => $tobranch });
-    notify_patrons({
-        frombranch    => $frombranch,
-        tobranch      => $tobranch,
-        fromdate      => $fromDate,
-        todate        => $toDate,
-        subject       => $email_subject,
-        body_template => $email_template,
-    });
+    if ( $movepatrons ) {
+        change_pickup_branch({ orig_branch => $frombranch, temp_branch => $tobranch });
+        change_patrons_homebranch({ orig_branch => $frombranch, temp_branch => $tobranch });
+        notify_patrons({
+            frombranch     => $frombranch,
+            tobranch       => $tobranch,
+            fromdate       => $fromDate,
+            todate         => $toDate,
+            email_subject  => $email_subject,
+            email_template => $email_template,
+        });
+    }
     update_calendar();
-    update_branch_closures();
+    update_closed_branches({
+        frombranch  => $frombranch,
+        tobranch    => $tobranch,
+        fromdate    => $fromDate,
+        todate      => $toDate,
+        movepatrons => $movepatrons,
+    });
 
     # print success page
-    my $template = $self->get_template( { file => 'tool-step2.tt' } );
+    my $template = $self->get_template( { file => 'closed_branch.tt' } );
+    $template->param(
+        branchcode  => $frombranch,
+        tempbranch  => $tobranch,
+        movepatrons => $movepatrons,
+    );
+    print $cgi->header(-charset => 'UTF-8');
+    print $template->output();
+}
+
+sub reopen_branch {
+    my ( $self, $args ) = @_;
+    my $cgi = $self->{'cgi'};
+
+    my $id          = $cgi->param('id');
+    my $branchcode  = $cgi->param('branchcode');
+    my $tempbranch  = $cgi->param('tempbranch');
+    my $fromdate    = $cgi->param('fromdate');
+    my $movepatrons = $cgi->param('movepatrons');
+
+    # steps to reopen
+    enable_branch_in_api($branchcode);
+    make_items_available($branchcode);
+    if ( $movepatrons ) {
+        revert_pickup_branch({orig_branch => $branchcode, temp_branch => $tempbranch});
+        revert_patrons_homebranch({orig_branch => $branchcode, temp_branch => $tempbranch});
+    }
+    finish_closed_branch($id);
+
+    # print success page
+    my $template = $self->get_template( { file => 'reopened_branch.tt' } );
+    $template->param(
+        branchcode  => $branchcode,
+        tempbranch  => $tempbranch,
+        movepatrons => $movepatrons,
+    );
 
     print $cgi->header(-charset => 'UTF-8');
     print $template->output();
 }
 
+
+
+# unused yet
+sub get_branch {
+    my $id = shift;
+    my $query = "SELECT * FROM closed_branches where id = '$id'";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
+    my @res;
+    while ( my $row = $sth->fetchrow_hashref() ) {
+        push @res, $row;
+    }
+    return @res;
+}
+
 # params: branch
-# set branchnotes to "DISABLED" so that API ignores branch
+# set branchnotes to "BRANCH_CLOSED" so that API can ignore branch
 sub disable_branch_in_api {
     my $branch = shift;
-    use Data::Dumper; warn Dumper($branch);
     my $query = "
         UPDATE branches
         SET branchnotes = 'BRANCH_CLOSED'
         WHERE branchcode = ?
         ";
-    warn $query;
-    #my $sth = C4::Context->dbh->prepare($query);
-    #$sth->execute($args->{branch}) or die "Error running query: $sth";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute($branch) or die "Error running query: $sth";
+
+    return;
+}
+
+# re-enable branch
+sub enable_branch_in_api {
+    my $branch = shift;
+    my $query = "
+        UPDATE branches
+        SET branchnotes = NULL
+        WHERE branchcode = ?
+        ";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute($branch) or die "Error running query: $sth";
 
     return;
 }
 
 # params: branch
-# make items notforloan, except if they are on loan or item is reserved
+# make items notforloan, except if they are on loan or specific item is reserved
 # dont touch homebranch, as they are to be left in boxes temporarily
 sub make_items_unavailable {
     my $branch = shift;
+    return unless $branch;
     my $query = "
         UPDATE items i
-        JOIN issues iss USING (itemnumber)
-        JOIN reserves ON (r.itemnumber=i.itemnumber)
         SET notforloan = 8, new_status = 'BRANCH_CLOSED'
-        WHERE homebranch = ?
+        WHERE i.homebranch = ?
+        AND NOT EXISTS (SELECT * FROM issues WHERE itemnumber = i.itemnumber)
+        AND NOT EXISTS (SELECT * FROM reserves WHERE itemnumber = i.itemnumber)
         ";
-    warn $query;
-    #my $sth = C4::Context->dbh->prepare($query);
-    #$sth->execute($args->{branch}) or die "Error running query: $sth";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute($branch) or die "Error running query: $sth";
     return;
 }
 
-# params: frombranch, tobranch
+# remove notforloan status on items from specified branch marked 'BRANCH_CLOSED'
+sub make_items_available {
+    my $branch = shift;
+    return unless $branch;
+    my $query = "
+        UPDATE items i
+        SET notforloan = 0, new_status = NULL
+        WHERE i.homebranch = ?
+        AND i.new_status = 'BRANCH_CLOSED'
+        ";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute($branch) or die "Error running query: $sth";
+    return;
+}
+
+# params: orig_branch, temp_branch
 # move all reserves to another pickup branch
 # mark reserve as 'MOVED FROM x'
 sub change_pickup_branch {
     my ( $args ) = @_;
-    use Data::Dumper; warn Dumper($args);
     my $query = "
         UPDATE reserves
-        SET branchcode = ?, reservenotes = 'MOVED FROM $args->{frombranch}'
-        WHERE branchcode = ?
+        SET branchcode = '$args->{temp_branch}', reservenotes = 'MOVED FROM $args->{orig_branch}'
+        WHERE branchcode = '$args->{orig_branch}'
+        ";
+    warn $query;
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
+
+    return;
+}
+
+# params: orig_branch, temp_branch
+# move all reserves back to original pickup branch
+# mark reserve as 'MOVED FROM x'
+sub revert_pickup_branch {
+    my ( $args ) = @_;
+    my $query = "
+        UPDATE reserves
+        SET branchcode = '$args->{orig_branch}', reservenotes = NULL
+        WHERE branchcode = '$args->{temp_branch}'
+        AND reservenotes = 'MOVED FROM $args->{orig_branch}'
         ";
     my $sth = C4::Context->dbh->prepare($query);
-    warn $sth->{Statement};
-    warn $sth->{ParamValues};
-    warn $query;
-    #$sth->execute($args->{frombranch}, $args->{tobranch}) or die "Error running query: $sth";
+    $sth->execute() or die "Error running query: $sth";
 
     return;
 }
 
-
-
-# params: frombranch, tobranch
+# params: orig_branch, temp_branch
 sub change_patrons_homebranch {
     my ( $args ) = @_;
-    use Data::Dumper; warn Dumper($args);
     my $query = "
-        UPDATE borrowers b
-        SET branchcode = ?, borrowernotes = 'MOVED FROM $args->{frombranch}'
-        WHERE homebranch = ?
+        UPDATE borrowers
+        SET branchcode = '$args->{temp_branch}', borrowernotes = 'MOVED FROM $args->{orig_branch}'
+        WHERE branchcode = '$args->{orig_branch}'
         ";
-    warn $query;
-    #my $sth = C4::Context->dbh->prepare($query);
-    #$sth->execute($args->{frombranch}, $args->{tobranch}) or die "Error running query: $sth";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
     return;
 }
 
-# params: branch, fromdate, todate
-sub update_calendar { }
+# params: orig_branch, temp_branch
+sub revert_patrons_homebranch {
+    my ( $args ) = @_;
+    my $query = "
+        UPDATE borrowers b
+        SET branchcode = '$args->{orig_branch}', borrowernotes = NULL
+        WHERE branchcode = '$args->{temp_branch}'
+        AND borrowernotes = 'MOVED FROM $args->{orig_branch}'
+        ";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
+    return;
+}
 
-# params: frombranch, tobranch, fromdate, todate, subject, body_template
+# TODO: Update branch closing times in calendar so pickup lists are updated
+# but the special_holidays table is a mess
+# params: branch, fromdate, todate
+sub update_calendar {
+    my ( $args ) = @_;
+    return;
+}
+
+# params: frombranch, tobranch, fromdate, todate, email_subject, email_template
 sub notify_patrons {
     my ( $args ) = @_;
     my $schema           = Koha::Database->new()->schema();
     my $message_queue_rs = $schema->resultset('MessageQueue');
 
     my $patrons = Koha::Patrons->search({ branchcode => $args->{frombranch} });
-
-    while (my ($patron) = $patrons->next()) {
-        my $email = create_email_body($body_template, $patron, $frombranch, $tobranch, $fromdate, $todate);
+    # compose email to patron and put in message queue
+    while ( my $patron = $patrons->next ) {
+        next unless $patron->email;
         my $email = Template->new();
         my $body;
-        $email->process( \$body_template, {
+        $email->process( \$args->{email_template}, {
             cardnumber => $patron->cardnumber,
-            name => $patron->name,
+            firstname  => $patron->firstname,
+            lastname   => $patron->lastname,
             frombranch => $args->{frombranch},
-            tobranch => $args->{tobranch},
-            fromdate => $args->{fromdate},
-            todate => $args->{todate},
+            tobranch   => $args->{tobranch},
+            fromdate   => output_pref($args->{fromdate}),
+            todate     => output_pref($args->{todate}),
         }, \$body );
-        use Data::Dumper; warn Dumper($email);
-        # $message_queue_rs->create(
-        #     {
-        #         borrowernumber         => $patron->borrowernumber,
-        #         subject                => $subject,
-        #         content                => $email,
-        #         message_transport_type => 'email',
-        #         status                 => 'pending',
-        #         to_address             => $patron->email,
-        #         from_address           => C4::Context->preference('KohaAdminEmailAddress'),
-        #     }
-        # );
+        #use Data::Dumper; warn Dumper($body);
+
+        $message_queue_rs->create(
+            {
+                borrowernumber         => $patron->borrowernumber,
+                subject                => $args->{email_subject},
+                content                => $body,
+                message_transport_type => 'email',
+                status                 => 'pending',
+                to_address             => $patron->email,
+                from_address           => C4::Context->preference('KohaAdminEmailAddress'),
+            }
+        );
     }
+    return;
 }
 
 # params: branch, fromdate, todate
-sub update_branch_closures {}
+sub update_closed_branches {
+    my ( $args ) = @_;
+    my $query = "
+        INSERT INTO closed_branches (branchcode,tempbranch,from_date,to_date,movepatrons,done)
+        VALUES (?, ?, ?, ?, ?, 0);
+        ";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute($args->{frombranch}, $args->{tobranch}, $args->{fromdate}, $args->{todate}, $args->{movepatrons}) or die "Error running query: $sth";
+    return;
+}
+
+# params: id
+sub finish_closed_branch {
+    my $id = shift;
+    my $query = "
+        UPDATE closed_branches
+        SET done = 1
+        WHERE id = '$id'
+        ";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
+    return;
+}
 
 1;
