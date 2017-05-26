@@ -1,4 +1,5 @@
 [% USE Branches %]
+[% USE KohaDates %]
 [% INCLUDE 'doc-head-open.inc' %]
  <title>Koha: Tools: Branch Closure</title>
 [% INCLUDE 'doc-head-close.inc' %]
@@ -10,10 +11,12 @@
 <div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo; Stenging av avdeling &rsaquo; Eposter sendt</div>
 
 <div id="doc3">
-    [% Branches.GetName(branchcode) %] er nå stengt.<br />
+    [% Branches.GetName(branchcode) %] er markert for stenging.<br />
     [% IF movepatrons %]
-      Lånere og reservasjoner er midlertidig flyttet til [% Branches.GetName(tempbranch) %], og lånere som har registrert epost vil få varsel.
+      Lånere og reservasjoner er midlertidig flyttet til [% Branches.GetName(tempbranch) %], og lånere som har registrert epost vil få varsel.<br />
     [% END %]
+    <br />
+    <strong>Merk at avdelingens eksemplarer er tilgjengelige inntil avdelingen blir faktisk markert stengt i listen.</strong><br />
     <form>
       <input type="hidden" name="class" value="[% CLASS %]"/>
       <input type="hidden" name="method" value="[% METHOD %]"/>

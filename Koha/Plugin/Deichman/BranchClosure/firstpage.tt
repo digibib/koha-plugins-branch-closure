@@ -35,13 +35,18 @@
                   <form id="reopen_branch">
                     <input type="hidden" name="class" value="[% CLASS %]"/>
                     <input type="hidden" name="method" value="[% METHOD %]"/>
-                    <input type="hidden" name="op" value="reopen" />
                     <input type="hidden" name="id" value="[% cb.id %]" />
                     <input type="hidden" name="branchcode" value="[% cb.branchcode %]" />
                     <input type="hidden" name="tempbranch" value="[% cb.tempbranch %]" />
                     <input type="hidden" name="fromdate" value="[% cb.fromdate %]" />
                     <input type="hidden" name="movepatrons" value="[% cb.movepatrons %]" />
-                    <input type="submit" value="gjenåpne" />
+                    [% IF cb.items_moved == 0 %]
+                      <input type="hidden" name="op" value="moveitems" />
+                      <input type="submit" value="steng/skjul eksemplarer" />
+                    [% ELSE %]
+                      <input type="hidden" name="op" value="reopen" />
+                      <input type="submit" value="gjenåpne" />
+                    [% END %]
                   </form>
                 [% ELSE %]
                   Åpnet
@@ -82,10 +87,13 @@
       <br/><br/>
 
       <p>Dato avdelingen skal stenge:</p>
-      <strong>Merk at avdelingen vil stenges umiddelbart, uavhengig av dato valgt her.</strong><br />
+      <strong>Merk at avdelingen vil markeres for stenging umiddelbart, og lånere og reservasjoner blir flyttet.<br />
+      Eksemplarene vil være tilgjengelig inntil stengingen fullføres på listen øverst på denne siden.<br />
+      Datoene er bare for loggføring.</strong><br />
       <input type="date" id="fromdate" name="fromdate" class="datepicker" />
 
       <p>Dato avdelingen skal åpne igjen:</p>
+      <strong>Merk at avdelingen må gjenåpnes i listen øverst på denne siden. Datoene er bare for loggføring.</strong><br />
       <input type="date" id="todate" name="todate" class="datepicker" />
 
       <p>Flytt lånere og reservasjoner til midlertidig avdeling</p>

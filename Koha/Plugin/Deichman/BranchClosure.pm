@@ -58,6 +58,7 @@ sub install() {
             `from_date` DATE NOT NULL,
             `to_date` DATE NOT NULL,
             `movepatrons` int(1) DEFAULT 0,
+            `items_moved` int(1) DEFAULT 0,
             `done` int(1) NOT NULL DEFAULT 0,
             PRIMARY KEY (id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
@@ -110,9 +111,11 @@ sub tool {
     my $op = $cgi->param('op') || "";
 
     if ( $op eq "reopen" ) {
-        $self->reopen_branch;
+        $self->reopen_branch_step;
+    } elsif ( $op eq "moveitems" ) {
+        $self->move_items_step;
     } elsif ( $op eq "close" ) {
-        $self->close_branch;
+        $self->close_branch_step;
     } else {
         $self->firstpage;
     }
@@ -152,8 +155,30 @@ sub get_closed_branches {
     return @res;
 }
 
+sub move_items_step {
+    my ( $self, $args ) = @_;
+    my $cgi = $self->{'cgi'};
+
+    my $id          = $cgi->param('id');
+    my $frombranch     = $cgi->param('frombranch');
+    my $tobranch       = $cgi->param('tobranch');
+
+    # do database updates
+    make_items_unavailable($frombranch);
+    mark_items_as_moved($id);
+
+    # print success page
+    my $template = $self->get_template( { file => 'items_moved.tt' } );
+    $template->param(
+        branchcode  => $frombranch,
+        tempbranch  => $tobranch,
+    );
+    print $cgi->header(-charset => 'UTF-8');
+    print $template->output();
+}
+
 # Main method for closing branch
-sub close_branch {
+sub close_branch_step {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
@@ -200,7 +225,7 @@ sub close_branch {
     print $template->output();
 }
 
-sub reopen_branch {
+sub reopen_branch_step {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
@@ -283,7 +308,7 @@ sub make_items_unavailable {
     return unless $branch;
     my $query = "
         UPDATE items i
-        SET notforloan = 8, new_status = 'BRANCH_CLOSED'
+        SET notforloan = 1, new_status = 'BRANCH_CLOSED'
         WHERE i.homebranch = ?
         AND NOT EXISTS (SELECT * FROM issues WHERE itemnumber = i.itemnumber)
         AND NOT EXISTS (SELECT * FROM reserves WHERE itemnumber = i.itemnumber)
@@ -424,6 +449,19 @@ sub update_closed_branches {
         ";
     my $sth = C4::Context->dbh->prepare($query);
     $sth->execute($args->{frombranch}, $args->{tobranch}, $args->{fromdate}, $args->{todate}, $args->{movepatrons}) or die "Error running query: $sth";
+    return;
+}
+
+# params: id
+sub mark_items_as_moved {
+    my $id = shift;
+    my $query = "
+        UPDATE closed_branches
+        SET items_moved = 1
+        WHERE id = '$id'
+        ";
+    my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
     return;
 }
 
