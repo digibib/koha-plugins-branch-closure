@@ -20,7 +20,7 @@ our $metadata = {
     author          => 'Benjamin Rokseth',
     description     => 'This plugin takes care of the steps for closing a branch',
     date_authored   => '2017-05-11',
-    date_updated    => '2017-05-11',
+    date_updated    => '2017-06-08',
     minimum_version => '16.11.070000',
     maximum_version => undef,
     version         => $VERSION,
@@ -160,8 +160,8 @@ sub move_items_step {
     my $cgi = $self->{'cgi'};
 
     my $id          = $cgi->param('id');
-    my $frombranch     = $cgi->param('frombranch');
-    my $tobranch       = $cgi->param('tobranch');
+    my $frombranch  = $cgi->param('branchcode');
+    my $tobranch    = $cgi->param('tempbranch');
 
     # do database updates
     make_items_unavailable($frombranch);
@@ -182,8 +182,8 @@ sub close_branch_step {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
-    my $frombranch     = $cgi->param('frombranch');
-    my $tobranch       = $cgi->param('tobranch');
+    my $frombranch     = $cgi->param('branchcode');
+    my $tobranch       = $cgi->param('tempbranch');
     my $fromDate       = dt_from_string($cgi->param('fromdate'));
     my $toDate         = dt_from_string($cgi->param('todate'));
     my $email_subject  = $cgi->param('email_subject');
@@ -192,7 +192,6 @@ sub close_branch_step {
 
     # do database updates
     disable_branch_in_api($frombranch);
-    make_items_unavailable($frombranch);
     if ( $movepatrons ) {
         change_pickup_branch({ orig_branch => $frombranch, temp_branch => $tobranch });
         change_patrons_homebranch({ orig_branch => $frombranch, temp_branch => $tobranch });
@@ -343,7 +342,6 @@ sub change_pickup_branch {
         SET branchcode = '$args->{temp_branch}', reservenotes = 'MOVED FROM $args->{orig_branch}'
         WHERE branchcode = '$args->{orig_branch}'
         ";
-    warn $query;
     my $sth = C4::Context->dbh->prepare($query);
     $sth->execute() or die "Error running query: $sth";
 

@@ -67,7 +67,7 @@
       <input type="hidden" name="op" value="close" />
 
       <p>Avdeling som skal stenges:</p>
-      <select name="frombranch">
+      <select name="branchcode">
         [% FOREACH library IN libraries %]
           <option value="[% library.branchcode %]">
             [% library.branchname %]
@@ -77,7 +77,7 @@
       <br/><br/>
 
       <p>Midlertidig avdeling for lånere og eksemplarer:</p>
-      <select name="tobranch">
+      <select name="tempbranch">
         [% FOREACH library IN libraries %]
           <option value="[% library.branchcode %]">
             [% library.branchname %]
