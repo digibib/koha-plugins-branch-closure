@@ -194,7 +194,6 @@ sub close_branch_step {
     disable_branch_in_api($frombranch);
     if ( $movepatrons ) {
         change_pickup_branch({ orig_branch => $frombranch, temp_branch => $tobranch });
-        change_patrons_homebranch({ orig_branch => $frombranch, temp_branch => $tobranch });
         notify_patrons({
             frombranch     => $frombranch,
             tobranch       => $tobranch,
@@ -203,6 +202,7 @@ sub close_branch_step {
             email_subject  => $email_subject,
             email_template => $email_template,
         });
+        change_patrons_homebranch({ orig_branch => $frombranch, temp_branch => $tobranch });
     }
     update_calendar();
     update_closed_branches({
@@ -415,9 +415,9 @@ sub notify_patrons {
         $email->process( \$args->{email_template}, {
             cardnumber => $patron->cardnumber,
             firstname  => $patron->firstname,
-            lastname   => $patron->lastname,
-            frombranch => $args->{frombranch},
-            tobranch   => $args->{tobranch},
+            surname    => $patron->surname,
+            frombranch => Koha::Libraries->find($args->{frombranch})->branchname,
+            tobranch   => Koha::Libraries->find($args->{tobranch})->branchname,
             fromdate   => output_pref($args->{fromdate}),
             todate     => output_pref($args->{todate}),
         }, \$body );

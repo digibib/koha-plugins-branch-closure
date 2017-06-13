@@ -37,7 +37,7 @@
         <pre>
 [% TAGS [- -] %]
 [% firstname %]  - name of patron
-[% lastname %]   - surname of patron
+[% surname %]    - surname of patron
 [% cardnumber %] - cardnumber of patron
 [% frombranch %] - the name of the branch that will be closed
 [% tobranch %]   - the name of the temporary branch to use as pickup and homebranch during closure
