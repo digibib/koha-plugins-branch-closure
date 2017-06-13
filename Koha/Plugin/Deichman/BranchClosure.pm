@@ -418,8 +418,8 @@ sub notify_patrons {
             surname    => $patron->surname,
             frombranch => Koha::Libraries->find($args->{frombranch})->branchname,
             tobranch   => Koha::Libraries->find($args->{tobranch})->branchname,
-            fromdate   => output_pref($args->{fromdate}),
-            todate     => output_pref($args->{todate}),
+            fromdate   => output_pref({dt => $args->{fromdate}, dateonly => 1}),
+            todate     => output_pref({dt => $args->{todate}, dateonly => 1}),
         }, \$body );
         #use Data::Dumper; warn Dumper($body);
 
