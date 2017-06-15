@@ -341,6 +341,7 @@ sub change_pickup_branch {
         UPDATE reserves
         SET branchcode = '$args->{temp_branch}', reservenotes = 'MOVED FROM $args->{orig_branch}'
         WHERE branchcode = '$args->{orig_branch}'
+        AND found != 'W'
         ";
     my $sth = C4::Context->dbh->prepare($query);
     $sth->execute() or die "Error running query: $sth";
