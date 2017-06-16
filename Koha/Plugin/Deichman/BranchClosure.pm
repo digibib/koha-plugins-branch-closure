@@ -333,7 +333,7 @@ sub make_items_available {
 }
 
 # params: orig_branch, temp_branch
-# move all reserves to another pickup branch
+# move all reserves to another pickup branch, except items waiting on hold shelf
 # mark reserve as 'MOVED FROM x'
 sub change_pickup_branch {
     my ( $args ) = @_;
@@ -350,13 +350,13 @@ sub change_pickup_branch {
 }
 
 # params: orig_branch, temp_branch
-# move all reserves back to original pickup branch
+# move all reserves back to original pickup branch, except items waiting on hold shelf
 # mark reserve as 'MOVED FROM x'
 sub revert_pickup_branch {
     my ( $args ) = @_;
     my $query = "
         UPDATE reserves
-        SET branchcode = '$args->{orig_branch}', reservenotes = NULL
+        SET branchcode = IF(found = 'W', $args->{temp_branch}, $args->{orig_branch}), reservenotes = NULL
         WHERE branchcode = '$args->{temp_branch}'
         AND reservenotes = 'MOVED FROM $args->{orig_branch}'
         ";
@@ -373,6 +373,7 @@ sub change_patrons_homebranch {
         UPDATE borrowers
         SET branchcode = '$args->{temp_branch}', borrowernotes = 'MOVED FROM $args->{orig_branch}'
         WHERE branchcode = '$args->{orig_branch}'
+        AND categorycode IN ('V','B')
         ";
     my $sth = C4::Context->dbh->prepare($query);
     $sth->execute() or die "Error running query: $sth";
