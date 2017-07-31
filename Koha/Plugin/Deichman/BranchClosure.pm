@@ -356,7 +356,7 @@ sub revert_pickup_branch {
     my ( $args ) = @_;
     my $query = "
         UPDATE reserves
-        SET branchcode = IF(found = 'W', $args->{temp_branch}, $args->{orig_branch}), reservenotes = NULL
+        SET branchcode = IF(found = 'W', '$args->{temp_branch}', '$args->{orig_branch}'), reservenotes = NULL
         WHERE branchcode = '$args->{temp_branch}'
         AND reservenotes = 'MOVED FROM $args->{orig_branch}'
         ";
