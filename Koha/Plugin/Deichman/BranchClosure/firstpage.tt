@@ -7,7 +7,6 @@
 <body>
 [% INCLUDE 'header.inc' %]
 [% INCLUDE 'cat-search.inc' %]
-[% INCLUDE 'calendar.inc' %]
 
 <div id="breadcrumbs"><a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo; <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo; Branch Closure</div>
 
@@ -90,11 +89,13 @@
       <strong>Merk at avdelingen vil markeres for stenging umiddelbart, og lånere og reservasjoner blir flyttet.<br />
       Eksemplarene vil være tilgjengelig inntil stengingen fullføres på listen øverst på denne siden.<br />
       Datoene er bare for loggføring.</strong><br />
-      <input type="date" id="fromdate" name="fromdate" class="datepicker" />
+      <strong>Format: DD.MM.YYYY</strong><br />
+      <input type="date" id="fromdate" name="fromdate" />
 
       <p>Dato avdelingen skal åpne igjen:</p>
       <strong>Merk at avdelingen må gjenåpnes i listen øverst på denne siden. Datoene er bare for loggføring.</strong><br />
-      <input type="date" id="todate" name="todate" class="datepicker" />
+      <strong>Format: DD.MM.YYYY</strong><br />
+      <input type="date" id="todate" name="todate" />
 
       <p>Flytt lånere og reservasjoner til midlertidig avdeling</p>
       <input name="movepatrons" type="checkbox" checked="checked" />

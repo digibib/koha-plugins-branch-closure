@@ -12,7 +12,7 @@ use Koha::Libraries;
 use Koha::Patrons;
 
 ## Here we set our plugin version
-our $VERSION = 1.00;
+our $VERSION = 1.01;
 
 ## Here is our metadata, some keys are required, some are optional
 our $metadata = {
@@ -20,7 +20,7 @@ our $metadata = {
     author          => 'Benjamin Rokseth',
     description     => 'This plugin takes care of the steps for closing a branch',
     date_authored   => '2017-05-11',
-    date_updated    => '2017-06-08',
+    date_updated    => '2017-10-26',
     minimum_version => '16.11.070000',
     maximum_version => undef,
     version         => $VERSION,
@@ -194,14 +194,15 @@ sub close_branch_step {
     disable_branch_in_api($frombranch);
     if ( $movepatrons ) {
         change_pickup_branch({ orig_branch => $frombranch, temp_branch => $tobranch });
-        notify_patrons({
-            frombranch     => $frombranch,
-            tobranch       => $tobranch,
-            fromdate       => $fromDate,
-            todate         => $toDate,
-            email_subject  => $email_subject,
-            email_template => $email_template,
-        });
+        # Notification disabled 2017-10-26. Going to be a separate function/plugin
+        # notify_patrons({
+        #     frombranch     => $frombranch,
+        #     tobranch       => $tobranch,
+        #     fromdate       => $fromDate,
+        #     todate         => $toDate,
+        #     email_subject  => $email_subject,
+        #     email_template => $email_template,
+        # });
         change_patrons_homebranch({ orig_branch => $frombranch, temp_branch => $tobranch });
     }
     update_calendar();
@@ -302,12 +303,14 @@ sub enable_branch_in_api {
 # params: branch
 # make items notforloan, except if they are on loan or specific item is reserved
 # dont touch homebranch, as they are to be left in boxes temporarily
+# Also save notforloan status and homebranch into new_status for restoring later
+# Format: OrigStatus:0,OrigBranch:hutl
 sub make_items_unavailable {
     my $branch = shift;
     return unless $branch;
     my $query = "
         UPDATE items i
-        SET notforloan = 1, new_status = 'BRANCH_CLOSED'
+        SET new_status = CONCAT('OrigStatus:', i.notforloan, ',', 'OrigBranch:', i.homebranch), notforloan = 1
         WHERE i.homebranch = ?
         AND NOT EXISTS (SELECT * FROM issues WHERE itemnumber = i.itemnumber)
         AND NOT EXISTS (SELECT * FROM reserves WHERE itemnumber = i.itemnumber)
@@ -317,15 +320,17 @@ sub make_items_unavailable {
     return;
 }
 
-# remove notforloan status on items from specified branch marked 'BRANCH_CLOSED'
+# revert notforloan status from saved values in new_status
+# Format: OrigStatus:0,OrigBranch:hutl
 sub make_items_available {
     my $branch = shift;
     return unless $branch;
     my $query = "
         UPDATE items i
-        SET notforloan = 0, new_status = NULL
+        SET notforloan = (SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(new_status, 'OrigStatus:', -1), ': ', -1), ',', 1)),
+            new_status = NULL
         WHERE i.homebranch = ?
-        AND i.new_status = 'BRANCH_CLOSED'
+        AND LOCATE('OrigStatus', new_status) > 0
         ";
     my $sth = C4::Context->dbh->prepare($query);
     $sth->execute($branch) or die "Error running query: $sth";
@@ -384,12 +389,16 @@ sub change_patrons_homebranch {
 sub revert_patrons_homebranch {
     my ( $args ) = @_;
     my $query = "
-        UPDATE borrowers b
+        UPDATE borrowers
         SET branchcode = '$args->{orig_branch}', borrowernotes = NULL
         WHERE branchcode = '$args->{temp_branch}'
         AND borrowernotes = 'MOVED FROM $args->{orig_branch}'
         ";
     my $sth = C4::Context->dbh->prepare($query);
+    $sth->execute() or die "Error running query: $sth";
+
+    # remove borrowernotes on the rest, but dont touch homebranch
+    $sth = C4::Context->dbh->prepare("UPDATE borrowers SET borrowernotes = NULL WHERE borrowernotes = 'MOVED FROM $args->{orig_branch}'");
     $sth->execute() or die "Error running query: $sth";
     return;
 }
